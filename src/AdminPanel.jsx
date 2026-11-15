@@ -11,6 +11,8 @@ export default function AdminPanel({ onBackToStore }) {
   const [analyticsFilter, setAnalyticsFilter] = useState('daily') // 'daily' | 'weekly' | 'monthly'
   const [orders, setOrders] = useState([])
   const [products, setProducts] = useState([])
+  const [storeOpen, setStoreOpen] = useState(true)
+  const [settingsId, setSettingsId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -31,7 +33,7 @@ export default function AdminPanel({ onBackToStore }) {
     setError('')
 
     try {
-      const [ordersRes, productsRes] = await Promise.all([
+      const [ordersRes, productsRes, settingsRes] = await Promise.all([
         supabase
           .from('orders')
           .select('*, order_items(*)')
@@ -39,7 +41,11 @@ export default function AdminPanel({ onBackToStore }) {
         supabase
           .from('products')
           .select('*')
-          .order('name', { ascending: true })
+          .order('name', { ascending: true }),
+        supabase
+          .from('store_settings')
+          .select('*')
+          .limit(1)
       ])
 
       if (ordersRes.error) throw ordersRes.error
@@ -47,6 +53,11 @@ export default function AdminPanel({ onBackToStore }) {
 
       setOrders(ordersRes.data || [])
       setProducts(productsRes.data || [])
+
+      if (settingsRes.data && settingsRes.data.length > 0) {
+        setStoreOpen(Boolean(settingsRes.data[0].accepting_orders))
+        setSettingsId(settingsRes.data[0].id)
+      }
     } catch (err) {
       setError(err.message || 'Failed to load admin data.')
     } finally {
@@ -57,6 +68,26 @@ export default function AdminPanel({ onBackToStore }) {
   useEffect(() => {
     loadAdminData()
   }, [])
+
+  async function toggleStoreStatus() {
+    const newStatus = !storeOpen
+    try {
+      let query = supabase
+        .from('store_settings')
+        .update({ accepting_orders: newStatus })
+
+      if (settingsId) {
+        query = query.eq('id', settingsId)
+      }
+
+      const { error } = await query
+      if (error) throw error
+
+      setStoreOpen(newStatus)
+    } catch (err) {
+      alert('Failed to update store status: ' + err.message)
+    }
+  }
 
   async function markAsDelivered(orderId) {
     try {
@@ -87,7 +118,7 @@ export default function AdminPanel({ onBackToStore }) {
     const currentStock = Number(restockProduct.stock) || 0
     const currentCost = Number(restockProduct.cost_price) || 0
 
-    // Calculate new weighted average cost for remaining active stock inventory
+    // Calculate new weighted average cost
     let newWeightedCost = batchCost
     if (currentStock > 0) {
       const totalValue = (currentStock * currentCost) + (addQty * batchCost)
@@ -185,7 +216,7 @@ export default function AdminPanel({ onBackToStore }) {
 
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0)
 
-  // Profit calculation uses the locked order_items.unit_cost for absolute historical accuracy
+  // Profit calculation using locked historical order_items.unit_cost
   const totalProfit = filteredOrders.reduce((orderSum, order) => {
     const itemsProfit = (order.order_items || []).reduce((itemSum, item) => {
       const cost = Number(item.unit_cost || 0)
@@ -212,7 +243,7 @@ export default function AdminPanel({ onBackToStore }) {
       quantity: itemSalesMap[name].quantity,
       revenue: itemSalesMap[name].revenue
     }))
-    .sort((a, b) => b.quantity - a.quantity)
+    .sort((a, b) => b.quantity - a.quantity) // Decreasing order of sales
 
   return (
     <div className="admin-container">
@@ -222,31 +253,47 @@ export default function AdminPanel({ onBackToStore }) {
           <h1>Admin <span>Dashboard</span></h1>
         </div>
 
-        <button className="back-store-btn" onClick={onBackToStore} type="button">
-          <ArrowLeft size={16} />
-          Back to Store
-        </button>
+        {/* Store Status Toggle & Back Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', background: storeOpen ? '#e8f5ed' : '#ffebee', padding: '6px 14px', borderRadius: '20px', border: `1px solid ${storeOpen ? '#16834b' : '#c62828'}` }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: storeOpen ? '#16834b' : '#c62828', marginRight: '8px', display: 'inline-block' }} />
+            <span style={{ fontSize: '13px', fontWeight: 700, color: storeOpen ? '#16834b' : '#c62828' }}>
+              {storeOpen ? 'Accepting Orders' : 'Store Closed'}
+            </span>
+            <button 
+              onClick={toggleStoreStatus}
+              style={{ marginLeft: '10px', background: storeOpen ? '#c62828' : '#16834b', color: 'white', border: 0, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+            >
+              {storeOpen ? 'Close Store' : 'Open Store'}
+            </button>
+          </div>
+
+          <button className="back-store-btn" onClick={onBackToStore} type="button">
+            <ArrowLeft size={16} />
+            Back to Store
+          </button>
+        </div>
       </header>
 
       {/* Admin Nav Tabs */}
-      <div className="admin-tabs" style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #eceef3', paddingBottom: '15px' }}>
+      <div className="admin-tabs" style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #eceef3', paddingBottom: '15px', overflowX: 'auto' }}>
         <button 
           onClick={() => setActiveTab('analytics')}
-          style={{ background: activeTab === 'analytics' ? '#ff792e' : '#f0f2f5', color: activeTab === 'analytics' ? 'white' : '#20283a', border: 0, padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+          style={{ background: activeTab === 'analytics' ? '#ff792e' : '#f0f2f5', color: activeTab === 'analytics' ? 'white' : '#20283a', border: 0, padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
-          📊 Analytics & Sales
+          📊 Analytics & Bestsellers
         </button>
         <button 
           onClick={() => setActiveTab('orders')}
-          style={{ background: activeTab === 'orders' ? '#ff792e' : '#f0f2f5', color: activeTab === 'orders' ? 'white' : '#20283a', border: 0, padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+          style={{ background: activeTab === 'orders' ? '#ff792e' : '#f0f2f5', color: activeTab === 'orders' ? 'white' : '#20283a', border: 0, padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           📦 Orders ({orders.filter(o => o.status === 'pending').length} Pending)
         </button>
         <button 
           onClick={() => setActiveTab('inventory')}
-          style={{ background: activeTab === 'inventory' ? '#ff792e' : '#f0f2f5', color: activeTab === 'inventory' ? 'white' : '#20283a', border: 0, padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+          style={{ background: activeTab === 'inventory' ? '#ff792e' : '#f0f2f5', color: activeTab === 'inventory' ? 'white' : '#20283a', border: 0, padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
-          🏪 Inventory Management
+          🏪 Inventory & Restock
         </button>
       </div>
 
@@ -256,7 +303,7 @@ export default function AdminPanel({ onBackToStore }) {
         <div className="admin-loading"><div className="loader" /><p>Loading dashboard...</p></div>
       ) : (
         <>
-          {/* ================= TAB 1: ANALYTICS ================= */}
+          {/* ================= TAB 1: ANALYTICS & BESTSELLERS ================= */}
           {activeTab === 'analytics' && (
             <div className="analytics-section">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
@@ -279,6 +326,7 @@ export default function AdminPanel({ onBackToStore }) {
                 </div>
               </div>
 
+              {/* Financial Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '30px' }}>
                 <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eceef3' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#8b93a2', fontSize: '14px', fontWeight: 600 }}>
@@ -307,7 +355,7 @@ export default function AdminPanel({ onBackToStore }) {
                 </div>
               </div>
 
-              {/* Item Sales Leaderboard */}
+              {/* Item Sales Leaderboard (Decreasing order) */}
               <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eceef3', marginTop: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                   <Package size={22} color="#ff792e" />
@@ -346,7 +394,7 @@ export default function AdminPanel({ onBackToStore }) {
             </div>
           )}
 
-          {/* ================= TAB 2: ORDERS ================= */}
+          {/* ================= TAB 2: ORDERS MANAGEMENT ================= */}
           {activeTab === 'orders' && (
             <div className="orders-grid">
               {orders.length === 0 ? (
@@ -398,7 +446,7 @@ export default function AdminPanel({ onBackToStore }) {
             </div>
           )}
 
-          {/* ================= TAB 3: INVENTORY ================= */}
+          {/* ================= TAB 3: INVENTORY & RESTOCK ================= */}
           {activeTab === 'inventory' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -472,7 +520,6 @@ export default function AdminPanel({ onBackToStore }) {
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '4px' }}>Cost Price for this Batch (₹ per unit)</label>
                 <input type="number" step="0.01" required min="0" value={restockCost} onChange={e => setRestockCost(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #dfe3ec', boxSizing: 'border-box' }} placeholder="e.g. 15" />
-                <span style={{ fontSize: '11px', color: '#8b93a2', marginTop: '4px', display: 'block' }}>This cost price applies only to the new batch being added.</span>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -518,12 +565,12 @@ export default function AdminPanel({ onBackToStore }) {
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Image URL</label>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '4px' }}>Image URL</label>
                 <input type="url" value={productForm.image_url} onChange={e => setProductForm({ ...productForm, image_url: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #dfe3ec', boxSizing: 'border-box' }} placeholder="https://..." />
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowProductModal(false)} style={{ flex: '1', background: '#f0f2f5', color: '#20283a', border: 0, padding: '12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                <button type="button" onClick={() => setShowProductModal(false)} style={{ flex: 1, background: '#f0f2f5', color: '#20283a', border: 0, padding: '12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
                 <button type="submit" style={{ flex: 1, background: '#ff792e', color: 'white', border: 0, padding: '12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>Save Snack</button>
               </div>
             </form>
