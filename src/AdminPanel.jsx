@@ -89,15 +89,16 @@ export default function AdminPanel({ onBackToStore }) {
     }
   }
 
-  async function markAsDelivered(orderId) {
+  // Flexible order status updater (supports switching to delivered or pending)
+  async function updateOrderStatus(orderId, newStatus) {
     try {
       const { error } = await supabase
         .from('orders')
-        .update({ status: 'delivered' })
+        .update({ status: newStatus })
         .eq('id', orderId)
 
       if (error) throw error
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'delivered' } : o))
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
     } catch (err) {
       alert('Failed to update order status: ' + err.message)
     }
@@ -118,7 +119,6 @@ export default function AdminPanel({ onBackToStore }) {
     const currentStock = Number(restockProduct.stock) || 0
     const currentCost = Number(restockProduct.cost_price) || 0
 
-    // Calculate new weighted average cost
     let newWeightedCost = batchCost
     if (currentStock > 0) {
       const totalValue = (currentStock * currentCost) + (addQty * batchCost)
@@ -216,7 +216,6 @@ export default function AdminPanel({ onBackToStore }) {
 
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0)
 
-  // Profit calculation using locked historical order_items.unit_cost
   const totalProfit = filteredOrders.reduce((orderSum, order) => {
     const itemsProfit = (order.order_items || []).reduce((itemSum, item) => {
       const cost = Number(item.unit_cost || 0)
@@ -243,7 +242,7 @@ export default function AdminPanel({ onBackToStore }) {
       quantity: itemSalesMap[name].quantity,
       revenue: itemSalesMap[name].revenue
     }))
-    .sort((a, b) => b.quantity - a.quantity) // Decreasing order of sales
+    .sort((a, b) => b.quantity - a.quantity)
 
   return (
     <div className="admin-container">
@@ -303,7 +302,7 @@ export default function AdminPanel({ onBackToStore }) {
         <div className="admin-loading"><div className="loader" /><p>Loading dashboard...</p></div>
       ) : (
         <>
-          {/* ================= TAB 1: ANALYTICS & BESTSELLERS ================= */}
+          {/* ================= TAB 1: ANALYTICS ================= */}
           {activeTab === 'analytics' && (
             <div className="analytics-section">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
@@ -326,7 +325,6 @@ export default function AdminPanel({ onBackToStore }) {
                 </div>
               </div>
 
-              {/* Financial Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '30px' }}>
                 <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eceef3' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#8b93a2', fontSize: '14px', fontWeight: 600 }}>
@@ -355,7 +353,7 @@ export default function AdminPanel({ onBackToStore }) {
                 </div>
               </div>
 
-              {/* Item Sales Leaderboard (Decreasing order) */}
+              {/* Item Sales Leaderboard */}
               <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eceef3', marginTop: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                   <Package size={22} color="#ff792e" />
@@ -430,9 +428,17 @@ export default function AdminPanel({ onBackToStore }) {
                           {isDelivered ? 'Delivered' : 'Pending Delivery'}
                         </span>
 
-                        {!isDelivered && (
+                        {/* Bi-directional Toggle Button */}
+                        {isDelivered ? (
                           <button 
-                            onClick={() => markAsDelivered(order.id)}
+                            onClick={() => updateOrderStatus(order.id, 'pending')}
+                            style={{ background: '#f0f2f5', color: '#6b7280', border: '1px solid #dfe3ec', padding: '8px 14px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}
+                          >
+                            Revert to Pending
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'delivered')}
                             style={{ background: '#16834b', color: 'white', border: 0, padding: '8px 14px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}
                           >
                             Mark Delivered
@@ -446,7 +452,7 @@ export default function AdminPanel({ onBackToStore }) {
             </div>
           )}
 
-          {/* ================= TAB 3: INVENTORY & RESTOCK ================= */}
+          {/* ================= TAB 3: INVENTORY ================= */}
           {activeTab === 'inventory' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
