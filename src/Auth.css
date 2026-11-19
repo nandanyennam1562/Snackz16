@@ -91,6 +91,26 @@
   color: #aab1bf;
 }
 
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.forgot-link {
+  border: none;
+  background: transparent;
+  color: #f47721;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
 .auth-message {
   margin-top: 16px;
   padding: 12px;
@@ -128,6 +148,27 @@
   cursor: not-allowed;
 }
 
+.auth-back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid #dfe3eb;
+  border-radius: 10px;
+  background: transparent;
+  color: #4f5768;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-back-button:hover {
+  background: #f7f8fc;
+}
+
 .auth-switch {
   margin-top: 24px;
   color: #737b8c;
@@ -136,18 +177,10 @@
 }
 
 .auth-switch button {
-  margin-left: 5px;
-  padding: 0;
+  margin-left: 6px;
   border: none;
-  background: none;
+  background: transparent;
   color: #f47721;
-  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-}
-
-@media (max-width: 480px) {
-  .auth-card {
-    padding: 28px 22px;
-  }
 }

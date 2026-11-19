@@ -22,6 +22,7 @@ function App() {
   const [user, setUser] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false)
   const [cartOpen, setCartOpen] = useState(false)
   const [isAdminView, setIsAdminView] = useState(false)
   const [isMyOrdersView, setIsMyOrdersView] = useState(false)
@@ -89,15 +90,22 @@ function App() {
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         const currentUser = session?.user ?? null
         setUser(currentUser)
+
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveryMode(true)
+          setShowAuth(true)
+        }
+
         if (currentUser) {
           checkAdminRole(currentUser.id)
         } else {
           setIsAdmin(false)
           setIsAdminView(false)
           setIsMyOrdersView(false)
+          setIsRecoveryMode(false)
         }
       }
     )
@@ -173,8 +181,16 @@ function App() {
     setCartOpen(true)
   }
 
-  if (showAuth && !user) {
-    return <Auth />
+  if (showAuth && (!user || isRecoveryMode)) {
+    return (
+      <Auth
+        isRecoveryMode={isRecoveryMode}
+        onFinishRecovery={() => {
+          setIsRecoveryMode(false)
+          setShowAuth(false)
+        }}
+      />
+    )
   }
 
   if (isAdminView && isAdmin) {
@@ -244,6 +260,7 @@ function App() {
                 setIsAdmin(false)
                 setIsAdminView(false)
                 setIsMyOrdersView(false)
+                setIsRecoveryMode(false)
               }}
             >
               <LogOut size={17} />
